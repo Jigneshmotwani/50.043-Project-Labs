@@ -27,8 +27,15 @@ public class Catalog {
      * Constructor.
      * Creates a new, empty catalog.
      */
+    private ConcurrentHashMap<Integer, DbFile> idToDbFile;
+    private ConcurrentHashMap<Integer, String> idToName;
+    private ConcurrentHashMap<Integer, String> idToPkeyField;
+
     public Catalog() {
         // some code goes here
+        this.idToDbFile = new ConcurrentHashMap<>();
+        this.idToName = new ConcurrentHashMap<>();
+        this.idToPkeyField = new ConcurrentHashMap<>();
     }
 
     /**
@@ -42,6 +49,37 @@ public class Catalog {
      */
     public void addTable(DbFile file, String name, String pkeyField) {
         // some code goes here
+        Integer tableID = file.getId();
+
+        if (name == null) {
+            throw new IllegalArgumentException("Name cannot be null");
+        }
+        else {
+            if (this.idToDbFile.containsKey(tableID)) {
+                this.idToDbFile.replace(tableID, file);
+                this.idToName.replace(tableID, name);
+                this.idToPkeyField.replace(tableID, pkeyField);
+            }
+
+            // Duplicate table name handling
+            else if (this.idToName.containsValue(name)) {
+                for (Map.Entry<Integer, String> entry : this.idToName.entrySet()) {
+                    if (entry.getValue().equals(name)) {
+                        this.idToDbFile.remove(entry.getKey());
+                        this.idToName.remove(entry.getKey());
+                        this.idToPkeyField.remove(entry.getKey());
+                    }
+                }
+                this.idToDbFile.put(tableID, file);
+                this.idToName.put(tableID, name);
+                this.idToPkeyField.put(tableID, pkeyField);
+            }
+            else {
+                this.idToDbFile.put(tableID, file);
+                this.idToName.put(tableID, name);
+                this.idToPkeyField.put(tableID, pkeyField);
+            }
+        }
     }
 
     public void addTable(DbFile file, String name) {
@@ -65,7 +103,12 @@ public class Catalog {
      */
     public int getTableId(String name) throws NoSuchElementException {
         // some code goes here
-        return 0;
+        for (Map.Entry<Integer, String> entry : this.idToName.entrySet()) {
+            if (entry.getValue().equals(name)) {
+                return entry.getKey();
+            }
+        }
+        throw new NoSuchElementException("Table does not exist");
     }
 
     /**
@@ -76,7 +119,12 @@ public class Catalog {
      */
     public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
         // some code goes here
-        return null;
+        for (DbFile db_entry : this.idToDbFile.values()) {
+            if (db_entry.getId() == tableid) {
+                return db_entry.getTupleDesc();
+            }
+        }
+        throw new NoSuchElementException("Table does not exist");
     }
 
     /**
@@ -87,27 +135,45 @@ public class Catalog {
      */
     public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {
         // some code goes here
-        return null;
+        for (DbFile db_entry : this.idToDbFile.values()) {
+            if (db_entry.getId() == tableid) {
+                return db_entry;
+            }
+        }
+        throw new NoSuchElementException("Table does not exist");
     }
 
     public String getPrimaryKey(int tableid) {
         // some code goes here
-        return null;
+        for (Map.Entry<Integer, String> entry : this.idToPkeyField.entrySet()) {
+            if (entry.getKey() == tableid) {
+                return entry.getValue();
+            }
+        }
+        throw new NoSuchElementException("Table does not exist");
     }
 
     public Iterator<Integer> tableIdIterator() {
         // some code goes here
-        return null;
+        return this.idToDbFile.keySet().iterator();
     }
 
     public String getTableName(int id) {
         // some code goes here
-        return null;
+        for (Map.Entry<Integer, String> entry : this.idToName.entrySet()) {
+            if (entry.getKey() == id) {
+                return entry.getValue();
+            }
+        }
+        throw new NoSuchElementException("Table does not exist");
     }
     
     /** Delete all tables from the catalog */
     public void clear() {
         // some code goes here
+        this.idToDbFile.clear();
+        this.idToName.clear();
+        this.idToPkeyField.clear();
     }
     
     /**

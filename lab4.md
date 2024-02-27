@@ -1,6 +1,6 @@
 # Lab 4: B+ Tree Index
 
-### Due: Sunday, 23 April 11:59PM
+### Due: Sunday, 21 April 11:59PM
 
 In this lab you will implement a B+ tree index for efficient lookups and range
 scans. We supply you with all of the low-level code you will need to implement

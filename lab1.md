@@ -1,6 +1,6 @@
 # Lab 1: SimpleDB Storage 
 
-### Due: Sunday, 4 March 11:59PM
+### Due: Sunday, 3 March 11:59PM
 
 
 In the lab assignments you will write a basic database management system called SimpleDB. For this lab, you

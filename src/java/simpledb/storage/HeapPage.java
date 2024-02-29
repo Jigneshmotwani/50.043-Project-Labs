@@ -300,7 +300,6 @@ public class HeapPage implements Page {
      */
     public boolean isSlotUsed(int i) {
         // some code goes here
-        // page = pid.getPageNumber();
         byte headerByte = header[i / 8];
         int headerBit = i % 8;
         return (headerByte & (1 << headerBit)) != 0;

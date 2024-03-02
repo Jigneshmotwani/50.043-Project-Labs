@@ -44,7 +44,7 @@ public class HeapFile implements DbFile {
      */
     public File getFile() {
         // some code goes here
-        return this.file;
+        return file;
     }
 
     /**
@@ -57,7 +57,7 @@ public class HeapFile implements DbFile {
      * @return an ID uniquely identifying this HeapFile.
      */
     public int getId() {
-        return this.file.getAbsolutePath().hashCode();
+        return file.getAbsolutePath().hashCode();
     }
 
     /**
@@ -66,11 +66,31 @@ public class HeapFile implements DbFile {
      * @return TupleDesc of this DbFile.
      */
     public TupleDesc getTupleDesc() {
-        return this.tupledesc;
+        return tupledesc;
     }
 
     // see DbFile.java for javadocs
     public Page readPage(PageId pid) {
+        // The page size can be obtained from BufferPool
+        int pageSize = BufferPool.getPageSize();
+        byte[] pageData = new byte[pageSize];
+        
+        try (RandomAccessFile file = new RandomAccessFile(this.file, "r")) {
+            // Calculate the offset in the file where the page begins
+            long offset = (long) pid.getPageNumber() * pageSize;
+            file.seek(offset);
+            
+            // Read the page data from the file
+            int read = file.read(pageData, 0, pageSize);
+            if (read != pageSize) {
+                throw new IllegalArgumentException("Not enough data in file");
+            }
+            
+            // Return a new HeapPage
+            return new HeapPage(new HeapPageId(pid.getTableId(), pid.getPageNumber()), pageData);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         return null;
     }
 

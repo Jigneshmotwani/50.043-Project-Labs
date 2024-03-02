@@ -63,11 +63,11 @@ public class TupleDesc implements Serializable {
      */
     public TupleDesc(Type[] typeAr, String[] fieldAr) {
         // some code goes here
-        if (typeAr.length < 1) {
-            throw new IllegalArgumentException();
+        if (typeAr.length == 0) {
+            throw new IllegalArgumentException("Length of typeAr must be at least 1");
         }
         if (typeAr.length != fieldAr.length) {
-            throw new IllegalArgumentException();
+            throw new IllegalArgumentException("Length of typeAr and fieldAr must be the same");
         }
         this.tdItems = new ArrayList<>();
         for (int i = 0; i < typeAr.length; i++) {
@@ -115,7 +115,7 @@ public class TupleDesc implements Serializable {
     public String getFieldName(int i) throws NoSuchElementException {
         // some code goes here
         if (i < 0 || i > this.numFields() - 1) {
-            throw new NoSuchElementException();
+            throw new NoSuchElementException("Invalid field reference");
         }
         else {
             return this.tdItems.get(i).fieldName;
@@ -220,31 +220,28 @@ public class TupleDesc implements Serializable {
     public boolean equals(Object o) {
         // some code goes here
         // Check whether it's a valid object
-        if (o == null) {
-            return false;
-        }
         if (!(o instanceof TupleDesc)) {
             return false;
         }
-        // Cast as required object type for relevant properties
-        TupleDesc other = (TupleDesc) o;
-        // Check whether the number of fields is the same
-        if (this.numFields() != other.numFields()) {
+        TupleDesc obj = (TupleDesc) o;
+        if (this.numFields() != obj.numFields()) {
             return false;
         }
-        // Check whether the type of each field is the same
+
         for (int i = 0; i < this.numFields(); i++) {
-            if (this.getFieldType(i) != other.getFieldType(i)) {
+            if (!this.getFieldType(i).equals(obj.getFieldType(i))) {
                 return false;
             }
         }
+
         return true;
     }
 
     public int hashCode() {
         // If you want to use TupleDesc as keys for HashMap, implement this so
         // that equal objects have equals hashCode() results
-        return super.hashCode();
+        // return this.toString().hashCode();
+        return 0;
     }
 
     /**
@@ -264,7 +261,7 @@ public class TupleDesc implements Serializable {
             );
         }
         // Remove trailing characters
-        sb.delete(sb.length() - 2, sb.length());
-        return sb.toString();
+        // get substring of SB
+        return sb.substring(0, sb.length() - 2);
     }
 }

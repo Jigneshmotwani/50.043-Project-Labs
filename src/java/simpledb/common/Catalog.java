@@ -27,15 +27,12 @@ public class Catalog {
      * Constructor.
      * Creates a new, empty catalog.
      */
-    private ConcurrentHashMap<Integer, DbFile> idToDbFile;
-    private ConcurrentHashMap<Integer, String> idToName;
-    private ConcurrentHashMap<Integer, String> idToPkeyField;
+   
+    private Map<Integer, TableSchema> catalogMap;
 
     public Catalog() {
         // some code goes here
-        this.idToDbFile = new ConcurrentHashMap<>();
-        this.idToName = new ConcurrentHashMap<>();
-        this.idToPkeyField = new ConcurrentHashMap<>();
+        this.catalogMap = new ConcurrentHashMap<>();
     }
 
     /**
@@ -49,36 +46,20 @@ public class Catalog {
      */
     public void addTable(DbFile file, String name, String pkeyField) {
         // some code goes here
-        Integer tableID = file.getId();
+        Integer tableId = file.getId();
 
         if (name == null) {
-            throw new IllegalArgumentException("Name cannot be null");
-        }
-        else {
-            if (this.idToDbFile.containsKey(tableID)) {
-                this.idToDbFile.replace(tableID, file);
-                this.idToName.replace(tableID, name);
-                this.idToPkeyField.replace(tableID, pkeyField);
+            throw new IllegalArgumentException("Name is null.");
+        } else {
+            if (this.catalogMap.containsKey(tableId)) {
+                this.catalogMap.remove(tableId);
             }
 
-            // Duplicate table name handling
-            else if (this.idToName.containsValue(name)) {
-                for (Map.Entry<Integer, String> entry : this.idToName.entrySet()) {
-                    if (entry.getValue().equals(name)) {
-                        this.idToDbFile.remove(entry.getKey());
-                        this.idToName.remove(entry.getKey());
-                        this.idToPkeyField.remove(entry.getKey());
-                    }
-                }
-                this.idToDbFile.put(tableID, file);
-                this.idToName.put(tableID, name);
-                this.idToPkeyField.put(tableID, pkeyField);
-            }
-            else {
-                this.idToDbFile.put(tableID, file);
-                this.idToName.put(tableID, name);
-                this.idToPkeyField.put(tableID, pkeyField);
-            }
+            // Handle duplicate table names
+            this.catalogMap.entrySet().removeIf(entry -> entry.getValue().getName() == name);
+
+            TableSchema t = new TableSchema(file, name, pkeyField);
+            this.catalogMap.put(tableId, t);
         }
     }
 
@@ -103,12 +84,14 @@ public class Catalog {
      */
     public int getTableId(String name) throws NoSuchElementException {
         // some code goes here
-        for (Map.Entry<Integer, String> entry : this.idToName.entrySet()) {
-            if (entry.getValue().equals(name)) {
-                return entry.getKey();
+        for (TableSchema t : this.catalogMap.values()) {
+            if (t.getName().equals(name)) {
+                return t.getFile().getId();
             }
         }
-        throw new NoSuchElementException("Table does not exist");
+
+        throw new NoSuchElementException("Table with specified name does not exist.");
+
     }
 
     /**
@@ -119,12 +102,11 @@ public class Catalog {
      */
     public TupleDesc getTupleDesc(int tableid) throws NoSuchElementException {
         // some code goes here
-        for (DbFile db_entry : this.idToDbFile.values()) {
-            if (db_entry.getId() == tableid) {
-                return db_entry.getTupleDesc();
-            }
+        if (this.catalogMap.containsKey(tableid)) {
+            return this.catalogMap.get(tableid).getFile().getTupleDesc();
+        } else {
+            throw new NoSuchElementException("Table with specified table ID does not exist.");
         }
-        throw new NoSuchElementException("Table does not exist");
     }
 
     /**
@@ -135,45 +117,40 @@ public class Catalog {
      */
     public DbFile getDatabaseFile(int tableid) throws NoSuchElementException {
         // some code goes here
-        for (DbFile db_entry : this.idToDbFile.values()) {
-            if (db_entry.getId() == tableid) {
-                return db_entry;
-            }
+        if (this.catalogMap.containsKey(tableid)) {
+            return this.catalogMap.get(tableid).getFile();
+        } else {
+            throw new NoSuchElementException("Table with specified table ID does not exist.");
         }
-        throw new NoSuchElementException("Table does not exist");
     }
 
     public String getPrimaryKey(int tableid) {
         // some code goes here
-        for (Map.Entry<Integer, String> entry : this.idToPkeyField.entrySet()) {
-            if (entry.getKey() == tableid) {
-                return entry.getValue();
-            }
+        if (this.catalogMap.containsKey(tableid)) {
+            return this.catalogMap.get(tableid).getPkeyField();
+        } else {
+            throw new NoSuchElementException("Table with specified table ID does not exist.");
         }
-        throw new NoSuchElementException("Table does not exist");
     }
 
     public Iterator<Integer> tableIdIterator() {
         // some code goes here
-        return this.idToDbFile.keySet().iterator();
+        return this.catalogMap.keySet().iterator();
     }
 
     public String getTableName(int id) {
         // some code goes here
-        for (Map.Entry<Integer, String> entry : this.idToName.entrySet()) {
-            if (entry.getKey() == id) {
-                return entry.getValue();
-            }
+        if (this.catalogMap.containsKey(id)) {
+            return this.catalogMap.get(id).getName();
+        } else {
+            throw new NoSuchElementException("Table with specified table ID does not exist.");
         }
-        throw new NoSuchElementException("Table does not exist");
     }
     
     /** Delete all tables from the catalog */
     public void clear() {
         // some code goes here
-        this.idToDbFile.clear();
-        this.idToName.clear();
-        this.idToPkeyField.clear();
+        this.catalogMap.clear();
     }
     
     /**

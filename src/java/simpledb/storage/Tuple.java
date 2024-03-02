@@ -104,16 +104,14 @@ public class Tuple implements Serializable {
         StringBuilder sb = new StringBuilder();
 
         for (int i = 0; i < this.fields.length; i++) {
-            sb.append(this.fields[i].toString());
-            if (i != this.fields.length - 1) {
-                sb.append("\t");
-            }
-            else {
-                sb.append(this.fields[i].toString() + "\n");
+            if (this.fields[i] == null) {
+                sb.append("null" + "\t");
+            } else {
+                sb.append(this.fields[i].toString() + "\t");
             }
         }
 
-        return sb.toString().trim();
+        return sb.substring(0, sb.length() - 1);
     }
 
     /**

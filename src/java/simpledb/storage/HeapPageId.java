@@ -1,5 +1,7 @@
 package simpledb.storage;
 
+import java.util.Objects;
+
 /** Unique identifier for HeapPage objects. */
 public class HeapPageId implements PageId {
     private int tableId;
@@ -21,7 +23,7 @@ public class HeapPageId implements PageId {
     /** @return the table associated with this PageId */
     public int getTableId() {
         // some code goes here
-        return tableId;
+        return this.tableId;
     }
 
     /**
@@ -30,7 +32,7 @@ public class HeapPageId implements PageId {
      */
     public int getPageNumber() {
         // some code goes here
-        return pgNo;
+        return this.pgNo;
     }
 
     /**
@@ -42,7 +44,8 @@ public class HeapPageId implements PageId {
     public int hashCode() {
         // some code goes here
         // throw new UnsupportedOperationException("implement this");
-        return 31 * tableId + pgNo;
+        int hashcode = Objects.hash(this.tableId, this.pgNo);
+        return hashcode;
     }
 
     /**
@@ -57,17 +60,11 @@ public class HeapPageId implements PageId {
         if (o == null) {
             return false;
         }
-
-        if (o == this) {
-            return true;
-        }
-
-        if (o instanceof PageId) {
-            PageId other = (PageId) o;
-            return tableId == other.getTableId() && other.getPageNumber() == pgNo;
-        } else {  
+        if (!(o instanceof HeapPageId)) {
             return false;
         }
+        HeapPageId other = (HeapPageId) o;
+        return this.tableId == other.tableId && this.pgNo == other.pgNo;
     }
 
     /**
@@ -77,12 +74,8 @@ public class HeapPageId implements PageId {
      *  constructors.
      */
     public int[] serialize() {
-        int[] data = new int[2];
-
-        data[0] = getTableId();
-        data[1] = getPageNumber();
-
-        return data;
+        // some code goes here
+        return new int[] {getTableId(), getPageNumber()};
     }
 
 }

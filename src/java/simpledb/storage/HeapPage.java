@@ -7,6 +7,9 @@ import simpledb.common.Catalog;
 import simpledb.transaction.TransactionId;
 
 import java.util.*;
+
+import javax.xml.crypto.Data;
+
 import java.io.*;
 
 /**
@@ -73,7 +76,9 @@ public class HeapPage implements Page {
     */
     private int getNumTuples() {        
         // some code goes here
-        return (int) Math.floor((BufferPool.getPageSize() * 8) / (td.getSize() * 8 + 1));
+        int tupleSize = td.getSize();
+        int bufferSize = Database.getBufferPool().getPageSize();
+        return (int) Math.floor((bufferSize * 8) / (tupleSize * 8 + 1));
     }
 
     /**
@@ -82,7 +87,7 @@ public class HeapPage implements Page {
      */
     private int getHeaderSize() {        
         // some code goes here
-        return (int) Math.ceil(numSlots / 8);                 
+        return (int) Math.ceil(this.getNumTuples() / 8.0);               
     }
     
     /** Return a view of this page before it was modified
@@ -116,7 +121,7 @@ public class HeapPage implements Page {
     public HeapPageId getId() {
         // some code goes here
         // throw new UnsupportedOperationException("implement this");
-        return pid;
+        return this.pid;
     }
 
     /**

@@ -5,6 +5,7 @@ import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 import simpledb.common.Type;
 import simpledb.common.DbException;
+import simpledb.storage.DbFile;
 import simpledb.storage.DbFileIterator;
 import simpledb.storage.Tuple;
 import simpledb.storage.TupleDesc;
@@ -23,6 +24,7 @@ public class SeqScan implements OpIterator {
     private int tableid;
     private String tableAlias;
     private DbFileIterator dbFileIterator;
+    private DbFile file;
 
     /**
      * Creates a sequential scan over the specified table as a part of the
@@ -47,6 +49,10 @@ public class SeqScan implements OpIterator {
         this.tid = tid;
         this.tableid = tableid;
         this.tableAlias = tableAlias;
+        this.file = Database.getCatalog().getDatabaseFile(this.tableid);
+        this.dbFileIterator = this.file.iterator(this.tid);
+
+        
     }
 
     /**
@@ -84,6 +90,8 @@ public class SeqScan implements OpIterator {
     public void reset(int tableid, String tableAlias) {
         this.tableid = tableid;
         this.tableAlias = tableAlias;
+        this.file = Database.getCatalog().getDatabaseFile(this.tableid);
+        this.dbFileIterator = this.file.iterator(tid);
     }
 
     public SeqScan(TransactionId tid, int tableId) {
@@ -91,7 +99,7 @@ public class SeqScan implements OpIterator {
     }
 
     public void open() throws DbException, TransactionAbortedException {
-        this.dbFileIterator = Database.getCatalog().getDatabaseFile(tableid).iterator(tid);
+        this.dbFileIterator.open();
     }
 
     /**
@@ -105,7 +113,15 @@ public class SeqScan implements OpIterator {
      *         prefixed with the tableAlias string from the constructor.
      */
     public TupleDesc getTupleDesc() {
-        return Database.getCatalog().getTupleDesc(tableid);
+        TupleDesc originalTd = this.file.getTupleDesc();
+        Type[] newTdTypeAr = new Type[originalTd.numFields()];
+        String[] newTdFieldAr = new String[originalTd.numFields()];
+
+        for (int i = 0; i < originalTd.numFields(); i++) {
+            newTdTypeAr[i] = originalTd.getFieldType(i);
+            newTdFieldAr[i] = this.tableAlias + "." + originalTd.getFieldName(i);
+        }
+        return new TupleDesc(newTdTypeAr, newTdFieldAr);
     }
 
     public boolean hasNext() throws TransactionAbortedException, DbException {

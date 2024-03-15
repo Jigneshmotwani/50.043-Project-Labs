@@ -9,6 +9,7 @@ import simpledb.transaction.TransactionId;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -215,8 +216,9 @@ public class BufferPool {
      */
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
-        // not necessary for lab1
-
+        for (Page p: this.pages.values()) {
+            this.flushPage(p.getId());
+        }
     }
 
     /**
@@ -230,7 +232,8 @@ public class BufferPool {
      */
     public synchronized void discardPage(PageId pid) {
         // some code goes here
-        // not necessary for lab1
+        // remove page from buffer pool without flushing to disk
+        this.pages.remove(pid);
     }
 
     /**
@@ -239,8 +242,18 @@ public class BufferPool {
      * @param pid an ID indicating the page to flush
      */
     private synchronized void flushPage(PageId pid) throws IOException {
-        // some code goes here
-        // not necessary for lab1
+        Page pg = this.pages.get(pid);
+
+        if (this.pages.containsKey(pid)) {
+            TransactionId dirty = pg.isDirty();
+            if (dirty != null) {
+                Database.getLogFile().logWrite(dirty, pg.getBeforeImage(), pg);
+                Database.getLogFile().force();
+                DbFile hpFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+                hpFile.writePage(pg);
+                pg.markDirty(false, null);
+            }
+        }
     }
 
     /**
@@ -248,7 +261,6 @@ public class BufferPool {
      */
     public synchronized void flushPages(TransactionId tid) throws IOException {
         // some code goes here
-        // not necessary for lab1|lab2
     }
 
     /**
@@ -257,7 +269,14 @@ public class BufferPool {
      */
     private synchronized void evictPage() throws DbException {
         // some code goes here
-        // not necessary for lab1
+        PageId pid = this.pages.keySet().iterator().next();
+
+        try {
+            this.flushPage(pid);
+        } catch (IOException e) {
+            throw new DbException("Page could not be flushed.");
+        }
+        this.pages.remove(pid);
     }
 
 }

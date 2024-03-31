@@ -4,6 +4,7 @@ import simpledb.common.Database;
 import simpledb.common.Permissions;
 import simpledb.common.DbException;
 import simpledb.common.DeadlockException;
+import simpledb.transaction.LockManager;
 import simpledb.transaction.TransactionAbortedException;
 import simpledb.transaction.TransactionId;
 
@@ -40,6 +41,8 @@ public class BufferPool {
 
     private ConcurrentHashMap<PageId, Page> pages;
 
+    private final LockManager lockManager;
+
     /**
      * Creates a BufferPool that caches up to numPages pages.
      *
@@ -47,6 +50,7 @@ public class BufferPool {
      */
     public BufferPool(int numPages) {
         // some code goes here
+        this.lockManager = new LockManager();
         this.numPages = numPages;
         this.pages = new ConcurrentHashMap<>(numPages);
     }
@@ -82,22 +86,36 @@ public class BufferPool {
      */
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
-        // some code goes here
-        if (this.pages.containsKey(pid)) {
-            Page page = this.pages.get(pid);
-            this.pages.remove(pid);
-            this.pages.put(pid, page);
-            return page;
+        if (perm == Permissions.READ_WRITE) { // dependent on lock manager
+            this.lockManager.acquireWriteLock(tid, pid);
+        } else if (perm == Permissions.READ_ONLY) { // dependent on lock manager
+            this.lockManager.acquireReadLock(tid, pid);
+        } else {
+            throw new DbException("Permission requested is not valid.");
         }
 
-        Page newPage = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
+        synchronized (this) {
+            // Check if the requested page is in pages
+            if (this.pages.containsKey(pid)) {
+                Page page = this.pages.get(pid);
+                this.pages.remove(pid);
+                this.pages.put(pid, page);
+                return page;
+            }
 
-        if (this.numPages <= this.pages.size()) {
-            this.evictPage();
+            Page n_page = Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
+
+            if (this.numPages <= this.pages.size()) {
+                this.evictPage();
+            }
+
+            if (perm == Permissions.READ_WRITE) {
+                n_page.markDirty(true, tid);
+            }
+
+            this.pages.put(pid, n_page);
+            return n_page;
         }
-
-        this.pages.put(pid, newPage);
-        return newPage;
     }
 
     /**

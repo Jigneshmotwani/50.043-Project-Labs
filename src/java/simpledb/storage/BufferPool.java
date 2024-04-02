@@ -129,7 +129,7 @@ public class BufferPool {
      */
     public void unsafeReleasePage(TransactionId tid, PageId pid) {
         // some code goes here
-        // not necessary for lab1|lab2
+        this.lockManager.releaseLock(tid, pid);        
     }
 
     /**
@@ -139,14 +139,13 @@ public class BufferPool {
      */
     public void transactionComplete(TransactionId tid) {
         // some code goes here
-        // not necessary for lab1|lab2
+        this.transactionComplete(tid, true);
     }
 
     /** Return true if the specified transaction has a lock on the specified page */
     public boolean holdsLock(TransactionId tid, PageId p) {
         // some code goes here
-        // not necessary for lab1|lab2
-        return false;
+        return this.lockManager.holdsLock(tid, p);
     }
 
     /**
@@ -158,7 +157,6 @@ public class BufferPool {
      */
     public void transactionComplete(TransactionId tid, boolean commit) {
         // some code goes here
-        // not necessary for lab1|lab2
     }
 
     /**
@@ -279,6 +277,13 @@ public class BufferPool {
      */
     public synchronized void flushPages(TransactionId tid) throws IOException {
         // some code goes here
+        if (this.lockManager.getPagesHeldBy(tid) == null) {
+            return;
+        }
+
+        for (PageId pid : this.lockManager.getPagesHeldBy(tid)) {
+            this.flushPage(pid);
+        }
     }
 
     /**
@@ -287,14 +292,28 @@ public class BufferPool {
      */
     private synchronized void evictPage() throws DbException {
         // some code goes here
-        PageId pid = this.pages.keySet().iterator().next();
+        Iterator<PageId> iter = this.pages.keySet().iterator();
+
+        Page lruPage = null;
+
+        while (iter.hasNext()) {
+            Page page = this.pages.get(iter.next());
+            if (page.isDirty() == null) {
+                lruPage = page;
+                break;
+            }
+        }
+
+        if (lruPage == null) {
+            throw new DbException("There are no pages to evict.");
+        }
 
         try {
-            this.flushPage(pid);
+            this.flushPage(lruPage.getId());
         } catch (IOException e) {
             throw new DbException("Page could not be flushed.");
         }
-        this.pages.remove(pid);
+        this.pages.remove(lruPage.getId());
     }
 
 }

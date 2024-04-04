@@ -17,9 +17,32 @@ public class LockManager {
     HashMap<TransactionId, Set<PageId>> pagesTid;
 
     public LockManager() {
-        pageLock = new HashMap<PageId, ReadWriteLock>();
-        dependencyGraph = new HashMap<TransactionId, Set<TransactionId>>();
-        pagesTid = new HashMap<TransactionId, Set<PageId>>();
+        this.pageLock = new HashMap<PageId, ReadWriteLock>();
+        this.dependencyGraph = new HashMap<TransactionId, Set<TransactionId>>();
+        this.pagesTid = new HashMap<TransactionId, Set<PageId>>();
+    }
+
+    private ReadWriteLock getLock(PageId pid) {
+        if (!this.pageLock.containsKey(pid)) {
+            this.pageLock.put(pid, new ReadWriteLock());
+            // create if doesn't exist
+        }
+        return this.pageLock.get(pid);
+    }
+
+    private Set<PageId> getPages(TransactionId tid) {
+        if (!this.pagesTid.containsKey(tid)) {
+            this.pagesTid.put(tid, new HashSet<PageId>());
+            // create if doesn't exist
+        }
+        return this.pagesTid.get(tid);
+    }
+
+    public Set<PageId> getPagesHeldByLock(TransactionId tid) {
+        if (this.pagesTid.containsKey(tid)) {
+            return this.pagesTid.get(tid);
+        }
+        return null;
     }
 
     public void acquireReadLock(TransactionId tid, PageId pid)
@@ -27,12 +50,12 @@ public class LockManager {
         ReadWriteLock lock;
         synchronized (this) {
             lock = this.getLock(pid);
-            if (lock.heldBy(tid)) {
+            if (lock.lockHeldBy(tid)) {
                 return;
             } 
 
-            if (!lock.holders().isEmpty() && lock.isLockedExclusively()) {
-                this.dependencyGraph.put(tid, lock.holders());
+            if (!lock.getHolders().isEmpty() && lock.isLockedExclusively()) {
+                this.dependencyGraph.put(tid, lock.getHolders());
                 if (this.deadlock(tid)) {
                     this.dependencyGraph.remove(tid);
                     throw new TransactionAbortedException();
@@ -52,11 +75,11 @@ public class LockManager {
         ReadWriteLock lock;
         synchronized (this) {
             lock = this.getLock(pid);
-            if (lock.isLockedExclusively() && lock.heldBy(tid)) {
+            if (lock.isLockedExclusively() && lock.lockHeldBy(tid)) {
                 return;
             }
-            if (!lock.holders().isEmpty()){
-                this.dependencyGraph.put(tid, lock.holders());
+            if (!lock.getHolders().isEmpty()){
+                this.dependencyGraph.put(tid, lock.getHolders());
                 if (this.deadlock(tid)) {
                     this.dependencyGraph.remove(tid);
                     throw new TransactionAbortedException();
@@ -93,20 +116,8 @@ public class LockManager {
         this.pagesTid.remove(tid);
     }
 
-    private ReadWriteLock getLock(PageId pid) {
-        if (!this.pageLock.containsKey(pid)) {
-            this.pageLock.put(pid, new ReadWriteLock());
-            // create if doesn't exist
-        }
-        return this.pageLock.get(pid);
-    }
-
-    private Set<PageId> getPages(TransactionId tid) {
-        if (!this.pagesTid.containsKey(tid)) {
-            this.pagesTid.put(tid, new HashSet<PageId>());
-            // create if doesn't exist
-        }
-        return this.pagesTid.get(tid);
+    public boolean holdsLock(TransactionId tid, PageId pid) {
+        return this.pagesTid.containsKey(tid) && this.pagesTid.get(tid).contains(pid);
     }
 
     private boolean deadlock(TransactionId tid) {
@@ -134,16 +145,5 @@ public class LockManager {
             }
         }
         return false; // No deadlock
-    }
-
-    public boolean holdsLock(TransactionId tid, PageId pid) {
-        return this.pagesTid.containsKey(tid) && this.pagesTid.get(tid).contains(pid);
-    }
-
-    public Set<PageId> getPagesHeldByLock(TransactionId tid) {
-        if (this.pagesTid.containsKey(tid)) {
-            return this.pagesTid.get(tid);
-        }
-        return null;
     }
 }

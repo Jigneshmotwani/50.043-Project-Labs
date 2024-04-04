@@ -14,127 +14,127 @@ public class ReadWriteLock {
 
     // implements an exclusive lock and multiple shared locks
     public ReadWriteLock() {
-        hold = new HashSet<TransactionId>();
-        acqs = new HashMap<TransactionId, Boolean>();
-        lockedExclusively = false; 
-        rnum = 0; 
-        wrnum = 0;
+        this.hold = new HashSet<TransactionId>();
+        this.acqs = new HashMap<TransactionId, Boolean>();
+        this.lockedExclusively = false; 
+        this.rnum = 0; 
+        this.wrnum = 0;
+    }
+
+    public Set<TransactionId> getHolders() {
+        return this.hold;
+    }
+
+    public Set<TransactionId> getAcquirers() {
+        return this.acqs.keySet();
+    }
+
+    public boolean isLockedExclusively() {
+        return this.lockedExclusively;
+    }
+
+    public boolean lockHeldBy(TransactionId tid) {
+        return this.hold.contains(tid);
     }
 
     public void readLock(TransactionId tid) {
-        if (hold.contains(tid) && !lockedExclusively) {
+        if (this.hold.contains(tid) && !this.lockedExclusively) {
             return;
         } 
 
-        acqs.put(tid, false); // false means read lock
+        this.acqs.put(tid, false); // false means read lock
         synchronized (this) {
             try {
-                while (wrnum != 0) {
+                while (this.wrnum != 0) {
                     this.wait();
                 }
-                ++rnum; // rnum is the number of transactions holding read locks
-                hold.add(tid);
-                lockedExclusively = false;
+                ++this.rnum; // rnum is the number of transactions holding read locks
+                this.hold.add(tid);
+                this.lockedExclusively = false;
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
-        acqs.remove(tid);
+        this.acqs.remove(tid);
     }
 
     public void writeLock(TransactionId tid) {
-        if (hold.contains(tid) && lockedExclusively) {
+        if (this.hold.contains(tid) && this.lockedExclusively) {
             return;
         } 
 
-        if (acqs.containsKey(tid) && acqs.get(tid)) {
+        if (this.acqs.containsKey(tid) && this.acqs.get(tid)) {
             return;
         }
 
-        acqs.put(tid, true);
+        this.acqs.put(tid, true);
         synchronized (this) {
             try {
-                if (hold.contains(tid)) {
-                    while (hold.size() > 1) {
+                if (this.hold.contains(tid)) {
+                    while (this.hold.size() > 1) {
                         this.wait();
                     }
-                    readUnlockWithoutNotifyingAll(tid);
+                    readUnlockNoNotify(tid);
                 }
 
-                while (rnum != 0 || wrnum != 0) {
+                while (this.rnum != 0 || this.wrnum != 0) {
                     this.wait();
                 }
-                ++wrnum;
-                hold.add(tid);
-                lockedExclusively = true;
+                ++this.wrnum;
+                this.hold.add(tid);
+                this.lockedExclusively = true;
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
         }
-        acqs.remove(tid);
+        this.acqs.remove(tid);
     }
 
-    private void readUnlockWithoutNotifyingAll(TransactionId tid) {
-        if (!hold.contains(tid)) {
+    private void readUnlockNoNotify(TransactionId tid) {
+        if (!this.hold.contains(tid)) {
             return;
         }
 
         synchronized (this) {
-            --rnum;
-            hold.remove(tid);
+            --this.rnum;
+            this.hold.remove(tid);
         }
     }
 
     public void readUnlock(TransactionId tid) {
-        if (!hold.contains(tid)) {
+        if (!this.hold.contains(tid)) {
             return;
         }
 
         synchronized (this) {
-            --rnum; 
-            hold.remove(tid);
+            --this.rnum; 
+            this.hold.remove(tid);
             notifyAll();
         }
     }
 
     public void writeUnlock(TransactionId tid) {
-        if (!hold.contains(tid)) {
+        if (!this.hold.contains(tid)) {
             return;
         }
 
-        if (!lockedExclusively) {
+        if (!this.lockedExclusively) {
             return;
         }
 
         synchronized (this) {
-            --wrnum;
-            hold.remove(tid);
+            --this.wrnum;
+            this.hold.remove(tid);
             notifyAll();
         }
     }
 
     public void unlock(TransactionId tid) {
-        if (!lockedExclusively) {
+        if (!this.lockedExclusively) {
             readUnlock(tid);
         }
         else {
             writeUnlock(tid);
         }
-    }
-
-    public Set<TransactionId> holders() {
-        return hold;
-    }
-
-    public boolean isLockedExclusively() {
-        return lockedExclusively;
-    }
-
-    public Set<TransactionId> acquirers() {
-        return acqs.keySet();
-    }
-
-    public boolean heldBy(TransactionId tid) {
-        return holders().contains(tid);
     }
 }

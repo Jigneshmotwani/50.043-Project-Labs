@@ -22,11 +22,16 @@ public class ReadWriteLock {
     }
 
     public void readLock(TransactionId tid) {
-        if (hold.contains(tid) && !lockedExclusively) return;
+        if (hold.contains(tid) && !lockedExclusively) {
+            return;
+        } 
+
         acqs.put(tid, false); // false means read lock
         synchronized (this) {
             try {
-                while (wrnum != 0) this.wait();
+                while (wrnum != 0) {
+                    this.wait();
+                }
                 ++rnum; // rnum is the number of transactions holding read locks
                 hold.add(tid);
                 lockedExclusively = false;
@@ -38,8 +43,14 @@ public class ReadWriteLock {
     }
 
     public void writeLock(TransactionId tid) {
-        if (hold.contains(tid) && lockedExclusively) return;
-        if (acqs.containsKey(tid) && acqs.get(tid)) return;
+        if (hold.contains(tid) && lockedExclusively) {
+            return;
+        } 
+
+        if (acqs.containsKey(tid) && acqs.get(tid)) {
+            return;
+        }
+
         acqs.put(tid, true);
         synchronized (this) {
             try {
@@ -49,7 +60,10 @@ public class ReadWriteLock {
                     }
                     readUnlockWithoutNotifyingAll(tid);
                 }
-                while (rnum != 0 || wrnum != 0) this.wait();
+
+                while (rnum != 0 || wrnum != 0) {
+                    this.wait();
+                }
                 ++wrnum;
                 hold.add(tid);
                 lockedExclusively = true;
@@ -61,7 +75,10 @@ public class ReadWriteLock {
     }
 
     private void readUnlockWithoutNotifyingAll(TransactionId tid) {
-        if (!hold.contains(tid)) return;
+        if (!hold.contains(tid)) {
+            return;
+        }
+
         synchronized (this) {
             --rnum;
             hold.remove(tid);
@@ -69,7 +86,10 @@ public class ReadWriteLock {
     }
 
     public void readUnlock(TransactionId tid) {
-        if (!hold.contains(tid)) return;
+        if (!hold.contains(tid)) {
+            return;
+        }
+
         synchronized (this) {
             --rnum; 
             hold.remove(tid);
@@ -78,8 +98,14 @@ public class ReadWriteLock {
     }
 
     public void writeUnlock(TransactionId tid) {
-        if (!hold.contains(tid)) return;
-        if (!lockedExclusively) return;
+        if (!hold.contains(tid)) {
+            return;
+        }
+
+        if (!lockedExclusively) {
+            return;
+        }
+
         synchronized (this) {
             --wrnum;
             hold.remove(tid);
@@ -88,9 +114,12 @@ public class ReadWriteLock {
     }
 
     public void unlock(TransactionId tid) {
-        if (!lockedExclusively)
+        if (!lockedExclusively) {
             readUnlock(tid);
-        else writeUnlock(tid);
+        }
+        else {
+            writeUnlock(tid);
+        }
     }
 
     public Set<TransactionId> holders() {

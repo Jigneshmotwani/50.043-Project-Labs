@@ -95,7 +95,6 @@ public class BufferPool {
         }
 
         synchronized (this) {
-            // Check if the requested page is in pages
             if (this.pages.containsKey(pid)) {
                 Page page = this.pages.get(pid);
                 this.pages.remove(pid);
@@ -157,6 +156,26 @@ public class BufferPool {
      */
     public void transactionComplete(TransactionId tid, boolean commit) {
         // some code goes here
+        try {
+            if (commit) {
+                this.flushPages(tid);
+            } else {
+                Iterator<PageId> iter = pages.keySet().iterator();
+                while (iter.hasNext()) {
+                    PageId pid = iter.next();
+                    Page page = pages.get(pid);
+                    if (page.isDirty() != null && page.isDirty().equals(tid)) {
+                        Page tempPage = page.getBeforeImage();
+                        pages.remove(pid);
+                        pages.put(pid, tempPage);
+                    }
+                }
+
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        this.lockManager.releaseAllLocks(tid);   
     }
 
     /**
@@ -176,19 +195,16 @@ public class BufferPool {
      */
     public void insertTuple(TransactionId tid, int tableId, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
-        DbFile file = Database.getCatalog().getDatabaseFile(tableId);
-        ArrayList<Page> pageArray = (ArrayList<Page>) file.insertTuple(tid, t);
-        for (Page pg : pageArray) {
-            pg.markDirty(true, tid);
-            if (!this.pages.containsKey(pg.getId()) && this.pages.size() >= this.numPages) {
+        DbFile dbfile = Database.getCatalog().getDatabaseFile(tableId);
+        ArrayList<Page> pageArray = (ArrayList<Page>) dbfile.insertTuple(tid, t);
+
+        for (Page page : pageArray) {
+            page.markDirty(true, tid);
+            if (!this.pages.containsKey(page.getId()) && this.pages.size() >= this.numPages) {
                 this.evictPage();
             }
-            // Cleverly re-use the same buffer pool instead of using another variable to
-            // track the
-            // LRU cache
-            this.pages.remove(pg.getId());
-            // Assign id to the page
-            this.pages.put(pg.getId(), pg);
+            this.pages.remove(page.getId());
+            this.pages.put(page.getId(), page);
         }
     }
 
@@ -208,20 +224,16 @@ public class BufferPool {
     public void deleteTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         int tableId = t.getRecordId().getPageId().getTableId();
-        DbFile file = Database.getCatalog().getDatabaseFile(tableId);
-        ArrayList<Page> pageArray = (ArrayList<Page>) file.deleteTuple(tid, t);
+        DbFile dbfile = Database.getCatalog().getDatabaseFile(tableId);
+        ArrayList<Page> pageArray = (ArrayList<Page>) dbfile.deleteTuple(tid, t);
 
-        for (Page pg : pageArray) {
-            pg.markDirty(true, tid);
-            if (!this.pages.containsKey(pg.getId()) && this.pages.size() >= this.numPages) {
+        for (Page page : pageArray) {
+            page.markDirty(true, tid);
+            if (!this.pages.containsKey(page.getId()) && this.pages.size() >= this.numPages) {
                 this.evictPage();
             }
-            // Cleverly re-use the same buffer pool instead of using another variable to
-            // track the
-            // LRU cache
-            this.pages.remove(pg.getId());
-            // Assign id to the page
-            this.pages.put(pg.getId(), pg);
+            this.pages.remove(page.getId());
+            this.pages.put(page.getId(), page);
         }
     }
 
@@ -232,8 +244,10 @@ public class BufferPool {
      */
     public synchronized void flushAllPages() throws IOException {
         // some code goes here
-        for (Page p: this.pages.values()) {
-            this.flushPage(p.getId());
+        for (Page page: this.pages.values()) {
+            if (page.isDirty() != null) {
+                this.flushPage(page.getId());
+            }
         }
     }
 
@@ -258,16 +272,17 @@ public class BufferPool {
      * @param pid an ID indicating the page to flush
      */
     private synchronized void flushPage(PageId pid) throws IOException {
-        Page pg = this.pages.get(pid);
+        Page page = this.pages.get(pid);
 
         if (this.pages.containsKey(pid)) {
-            TransactionId dirty = pg.isDirty();
-            if (dirty != null) {
-                Database.getLogFile().logWrite(dirty, pg.getBeforeImage(), pg);
+            TransactionId dirtyTid = page.isDirty();
+            
+            if (dirtyTid != null) {
+                Database.getLogFile().logWrite(dirtyTid, page.getBeforeImage(), page);
                 Database.getLogFile().force();
-                DbFile hpFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
-                hpFile.writePage(pg);
-                pg.markDirty(false, null);
+                DbFile hpfile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+                hpfile.writePage(page);
+                page.markDirty(false, null);
             }
         }
     }
@@ -277,11 +292,11 @@ public class BufferPool {
      */
     public synchronized void flushPages(TransactionId tid) throws IOException {
         // some code goes here
-        if (this.lockManager.getPagesHeldBy(tid) == null) {
+        if (this.lockManager.getPagesHeldByLock(tid) == null) {
             return;
         }
 
-        for (PageId pid : this.lockManager.getPagesHeldBy(tid)) {
+        for (PageId pid : this.lockManager.getPagesHeldByLock(tid)) {
             this.flushPage(pid);
         }
     }
@@ -297,7 +312,8 @@ public class BufferPool {
         Page lruPage = null;
 
         while (iter.hasNext()) {
-            Page page = this.pages.get(iter.next());
+            PageId pid = iter.next();
+            Page page = pages.get(pid);
             if (page.isDirty() == null) {
                 lruPage = page;
                 break;

@@ -1,6 +1,7 @@
 package simpledb.transaction;
 
 import java.util.*;
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import simpledb.common.Permissions;
 import simpledb.storage.PageId;
@@ -11,34 +12,38 @@ import simpledb.transaction.ReadWriteLock;
  * transaction when it is requested.
  */
 public class LockManager {
-    Map<PageId, ReadWriteLock> pageToLocks;
-    Map<TransactionId, Set<TransactionId>> depGraph;
-    Map<TransactionId, Set<PageId>> pagesHeldByTid;
+    HashMap<PageId, ReadWriteLock> pageLock;
+    HashMap<TransactionId, Set<TransactionId>> dependencyGraph;
+    HashMap<TransactionId, Set<PageId>> pagesTid;
 
     public LockManager() {
-        pageToLocks = new HashMap<PageId, ReadWriteLock>();
-        depGraph = new HashMap<TransactionId, Set<TransactionId>>();
-        pagesHeldByTid = new HashMap<TransactionId, Set<PageId>>();
+        pageLock = new HashMap<PageId, ReadWriteLock>();
+        dependencyGraph = new HashMap<TransactionId, Set<TransactionId>>();
+        pagesTid = new HashMap<TransactionId, Set<PageId>>();
     }
 
     public void acquireReadLock(TransactionId tid, PageId pid)
             throws TransactionAbortedException {
         ReadWriteLock lock;
         synchronized (this) {
-            lock = getOrCreateLock(pid);
-            if (lock.heldBy(tid)) return;
+            lock = this.getLock(pid);
+            if (lock.heldBy(tid)) {
+                return;
+            } 
+
             if (!lock.holders().isEmpty() && lock.isLockedExclusively()) {
-                depGraph.put(tid, lock.holders());
-                if (hasDeadLock(tid)) {
-                    depGraph.remove(tid);
+                this.dependencyGraph.put(tid, lock.holders());
+                if (this.deadlock(tid)) {
+                    this.dependencyGraph.remove(tid);
                     throw new TransactionAbortedException();
                 }
             }
         }
+
         lock.readLock(tid);
         synchronized (this) {
-            depGraph.remove(tid);
-            getOrCreatePagesHeld(tid).add(pid);
+            this.dependencyGraph.remove(tid);
+            this.getPages(tid).add(pid);
         }
     }
 
@@ -46,83 +51,99 @@ public class LockManager {
             throws TransactionAbortedException {
         ReadWriteLock lock;
         synchronized (this) {
-            lock = getOrCreateLock(pid);
-            if (lock.isLockedExclusively() && lock.heldBy(tid))
+            lock = this.getLock(pid);
+            if (lock.isLockedExclusively() && lock.heldBy(tid)) {
                 return;
+            }
             if (!lock.holders().isEmpty()){
-                depGraph.put(tid, lock.holders());
-                if (hasDeadLock(tid)) {
-                    depGraph.remove(tid);
+                this.dependencyGraph.put(tid, lock.holders());
+                if (this.deadlock(tid)) {
+                    this.dependencyGraph.remove(tid);
                     throw new TransactionAbortedException();
                 }
             }
         }
+
         lock.writeLock(tid);
         synchronized (this) {
-            depGraph.remove(tid);
-            getOrCreatePagesHeld(tid).add(pid);
+            this.dependencyGraph.remove(tid);
+            this.getPages(tid).add(pid);
         }
     }
 
     public synchronized void releaseLock(TransactionId tid, PageId pid) {
-        if (!pageToLocks.containsKey(pid)) return;
-        ReadWriteLock lock = pageToLocks.get(pid);
+        if (!this.pageLock.containsKey(pid)) {
+            return;
+        }
+
+        ReadWriteLock lock = this.pageLock.get(pid);
         lock.unlock(tid);
-        pagesHeldByTid.get(tid).remove(pid);
+        this.pagesTid.get(tid).remove(pid);
     }
 
     public synchronized void releaseAllLocks(TransactionId tid) {
-        if (!pagesHeldByTid.containsKey(tid)) return;
-        Set<PageId> pages = pagesHeldByTid.get(tid);
-        for (Object pageId: pages.toArray()) {
-            releaseLock(tid, ((PageId) pageId));
+        if (!this.pagesTid.containsKey(tid)) {
+            return;
         }
-        pagesHeldByTid.remove(tid);
+
+        Set<PageId> pages = this.pagesTid.get(tid);
+        for (Object pageId: pages.toArray()) {
+            this.releaseLock(tid, ((PageId) pageId));
+        }
+        this.pagesTid.remove(tid);
     }
 
-    private ReadWriteLock getOrCreateLock(PageId pageId) {
-        if (!pageToLocks.containsKey(pageId))
-            pageToLocks.put(pageId, new ReadWriteLock());
-        return pageToLocks.get(pageId);
+    private ReadWriteLock getLock(PageId pid) {
+        if (!this.pageLock.containsKey(pid)) {
+            this.pageLock.put(pid, new ReadWriteLock());
+            // create if doesn't exist
+        }
+        return this.pageLock.get(pid);
     }
 
-    private Set<PageId> getOrCreatePagesHeld(TransactionId tid) {
-        if (!pagesHeldByTid.containsKey(tid))
-            pagesHeldByTid.put(tid, new HashSet<PageId>());
-        return pagesHeldByTid.get(tid);
+    private Set<PageId> getPages(TransactionId tid) {
+        if (!this.pagesTid.containsKey(tid)) {
+            this.pagesTid.put(tid, new HashSet<PageId>());
+            // create if doesn't exist
+        }
+        return this.pagesTid.get(tid);
     }
 
-    private boolean hasDeadLock(TransactionId tid) {
-        Set<TransactionId> visited = new HashSet<TransactionId>();
-        Queue<TransactionId> q = new LinkedList<TransactionId>();
-        visited.add(tid);
-        q.offer(tid);
-        while (!q.isEmpty()) {
-            TransactionId head = q.poll();
-            if (!depGraph.containsKey(head)) continue;
-            for (TransactionId adj: depGraph.get(head)) {
-                if (adj.equals(head)) continue;
+    private boolean deadlock(TransactionId tid) {
+        Set<TransactionId> vis = new HashSet<TransactionId>();
+        Queue<TransactionId> queue = new LinkedList<TransactionId>();
+        vis.add(tid);
+        queue.offer(tid);
+        while (!queue.isEmpty()) {
+            TransactionId head = queue.poll();
+            if (!this.dependencyGraph.containsKey(head)) {
+                continue;
+            }
 
-                if (!visited.contains(adj)) {
-                    visited.add(adj);
-                    q.offer(adj);
+            for (TransactionId adj: this.dependencyGraph.get(head)) {
+                if (adj.equals(head)) {
+                    continue;
+                } 
+
+                if (!vis.contains(adj)) {
+                    vis.add(adj);
+                    queue.offer(adj);
                 } else {
-                    // Deadlock detected!
-                    return true;
+                    return true; // Deadlock
                 }
             }
         }
-        return false;
+        return false; // No deadlock
     }
 
     public boolean holdsLock(TransactionId tid, PageId pid) {
-        return pagesHeldByTid.containsKey(tid)
-                && pagesHeldByTid.get(tid).contains(pid);
+        return this.pagesTid.containsKey(tid) && this.pagesTid.get(tid).contains(pid);
     }
 
-    public Set<PageId> getPagesHeldBy(TransactionId tid) {
-        if (pagesHeldByTid.containsKey(tid))
-            return pagesHeldByTid.get(tid);
+    public Set<PageId> getPagesHeldByLock(TransactionId tid) {
+        if (this.pagesTid.containsKey(tid)) {
+            return this.pagesTid.get(tid);
+        }
         return null;
     }
 }

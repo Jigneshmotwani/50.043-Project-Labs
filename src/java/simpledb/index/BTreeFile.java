@@ -188,7 +188,39 @@ public class BTreeFile implements DbFile {
                                        Field f)
 					throws DbException, TransactionAbortedException {
 		// some code goes here
-        return null;
+		//
+		// If the current page is a leaf page, return it
+		// Otherwise, get the child pointer from the internal page and recursively find the leaf page
+		// that contains the key field f
+		switch (pid.pgcateg()) {
+			// simply return leaf page, no need to check
+			case BTreePageId.LEAF:
+				return (BTreeLeafPage) getPage(tid, dirtypages, pid, perm);
+			case BTreePageId.INTERNAL:
+			// read only perms for the internal pages
+				BTreeInternalPage page = (BTreeInternalPage) getPage(tid, dirtypages, pid, Permissions.READ_ONLY);
+				Iterator<BTreeEntry> iter = page.iterator();
+				if (iter == null || !iter.hasNext()) {
+					throw new DbException("Iterator empty.");
+				}
+				// handling case where f is null and getting the left child
+				if (f == null) {
+					return findLeafPage(tid, dirtypages, iter.next().getLeftChild(), perm, f);
+				}
+				BTreeEntry entry = null;
+				while (iter.hasNext()) {
+					// iterating through pages to find correct entry
+					entry = iter.next();
+					if (entry.getKey().compare(Op.GREATER_THAN_OR_EQ, f)) {
+						return findLeafPage(tid, dirtypages, entry.getLeftChild(), perm, f);
+					}
+				}
+				return findLeafPage(tid, dirtypages, entry.getRightChild(), perm, f);
+			case BTreePageId.HEADER:
+			case BTreePageId.ROOT_PTR:
+			default:
+				throw new DbException("Unexpected page category.");
+		}
 	}
 	
 	/**
@@ -239,7 +271,53 @@ public class BTreeFile implements DbFile {
 		// the new entry.  getParentWithEmtpySlots() will be useful here.  Don't forget to update
 		// the sibling pointers of all the affected leaf pages.  Return the page into which a 
 		// tuple with the given key field should be inserted.
-        return null;
+		BTreeLeafPage RPage = (BTreeLeafPage) getEmptyPage(tid, dirtypages, BTreePageId.LEAF);
+		Iterator<Tuple> tuples = page.reverseIterator();
+
+		// check if there are tuples to split
+		if (tuples == null || !tuples.hasNext()) {
+			throw new DbException("Reached the end of the tuples or nonexistent.");
+		}
+
+		// if so then we can split the page
+		int n_tuples = page.getNumTuples();
+		for (int i=0; i < n_tuples / 2; ++i) {
+			if (!tuples.hasNext()) {
+				throw new DbException("Reached the end.");
+			}
+			Tuple tuple = tuples.next();
+			page.deleteTuple(tuple);
+			RPage.insertTuple(tuple);
+		}
+
+		// Update the right neighbor of the page if it exists
+		if (page.getRightSiblingId() != null) {
+			BTreePageId oldRID = page.getRightSiblingId();
+			BTreeLeafPage oldRPage = (BTreeLeafPage) getPage(tid, dirtypages, oldRID, Permissions.READ_WRITE);
+			oldRPage.setLeftSiblingId(RPage.getId());
+		}
+
+		// now we set the IDs of the new page
+		RPage.setLeftSiblingId(page.getId());
+		RPage.setRightSiblingId(page.getRightSiblingId());
+		page.setRightSiblingId(RPage.getId());
+
+		if (!tuples.hasNext()) {
+			throw new DbException("Reached the end.");
+		}
+
+		Field idx = RPage.iterator().next().getField(keyField);
+		BTreeEntry entry = new BTreeEntry(idx, page.getId(), RPage.getId());
+
+		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), idx);
+		parent.insertEntry(entry);
+		updateParentPointers(tid, dirtypages, parent);
+
+        if (field.compare(Op.GREATER_THAN_OR_EQ, idx)) {
+			return RPage;
+		} else {
+			return page;
+		}
 		
 	}
 	
@@ -277,7 +355,45 @@ public class BTreeFile implements DbFile {
 		// the parent pointers of all the children moving to the new page.  updateParentPointers()
 		// will be useful here.  Return the page into which an entry with the given key field
 		// should be inserted.
-		return null;
+		
+		// first make the page to the right
+		BTreeInternalPage rightPage = (BTreeInternalPage) getEmptyPage(tid, dirtypages, BTreePageId.INTERNAL);
+		Iterator<BTreeEntry> it = page.reverseIterator();
+		if (!it.hasNext()) {
+			throw new DbException("No such entries.");
+		}
+		int n_entries = page.getNumEntries();
+		for (int i = 0; i < n_entries / 2; i++) {
+			if (!it.hasNext()) {
+				throw new DbException("No more entries to split.");
+			}
+			// Split the entry if it exists
+			BTreeEntry entry = it.next();
+			page.deleteKeyAndRightChild(entry);
+			rightPage.insertEntry(entry);
+		}
+
+		// get the middle key to push up
+		BTreeEntry midEntry = it.next();
+		Field midKey = midEntry.getKey();
+		page.deleteKeyAndRightChild(midEntry);
+		// push the middle key up to the parent
+
+		BTreeEntry n_entry = new BTreeEntry(midKey, page.getId(), rightPage.getId());
+		BTreeInternalPage parent = getParentWithEmptySlots(tid, dirtypages, page.getParentId(), midKey);
+		parent.insertEntry(n_entry);
+
+		// update the parent pointers
+		updateParentPointers(tid, dirtypages, page);
+		updateParentPointers(tid, dirtypages, rightPage);
+
+		// return the page into which an entry with the given key field should be inserted
+		if (field.compare(Op.GREATER_THAN_OR_EQ, midKey)) {
+			return rightPage;
+		} else {
+			return page;
+		}
+		
 	}
 	
 	/**

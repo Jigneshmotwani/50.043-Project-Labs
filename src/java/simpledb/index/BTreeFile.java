@@ -699,7 +699,7 @@ public class BTreeFile implements DbFile {
 		int n_tuples = (sibling.getNumTuples() - page.getNumTuples()) / 2;
 		Tuple tuple = null;
 
-		for (int i = 0; i < n_tuples; i++) {
+		for (int i = 0; i < n_tuples; ++i) {
 			if (!it.hasNext()) {
 				throw new DbException("No more tuples to steal.");
 			}
@@ -710,11 +710,10 @@ public class BTreeFile implements DbFile {
 		
 		if (tuple == null) {
 			throw new DbException("No tuples to steal.");
-		} else {
-			Field idx = tuple.getField(keyField);
-			entry.setKey(idx);
-			parent.updateEntry(entry);
 		}
+		Field idx = tuple.getField(keyField);
+		entry.setKey(idx);
+		parent.updateEntry(entry);
 	}
 
 	/**
@@ -802,7 +801,7 @@ public class BTreeFile implements DbFile {
 		BTreeEntry middle = new BTreeEntry(parentEntry.getKey(), move.getRightChild(), page.iterator().next().getLeftChild());
 		page.insertEntry(middle);
 
-		for (int i = 0; i < n_entries - 1; i++) {
+		for (int i = 0; i < n_entries - 1; ++i) {
 			if (!it.hasNext()) {
 				throw new DbException("No more entries to steal.");
 			}
@@ -850,7 +849,7 @@ public class BTreeFile implements DbFile {
 		BTreeEntry middle = new BTreeEntry(parentEntry.getKey(), page.reverseIterator().next().getRightChild(), move.getLeftChild());
 		page.insertEntry(middle);
 
-		for (int i = 0; i < n_entries - 1; i++) {
+		for (int i = 0; i < n_entries - 1; ++i) {
 			if (!it.hasNext()) {
 				throw new DbException("No more entries to steal.");
 			}
@@ -901,7 +900,7 @@ public class BTreeFile implements DbFile {
 
 		int n_tuples = rightPage.getNumTuples();
 		
-		for (int i = 0; i < n_tuples; i++) {
+		for (int i = 0; i < n_tuples; ++i) {
 			if (!it.hasNext()) {
 				throw new DbException("No more tuples to merge.");
 			}
@@ -957,15 +956,10 @@ public class BTreeFile implements DbFile {
 			throw new DbException("No entries to merge.");
 		}
 
-		int n_entries = rightPage.getNumEntries();
-
 		BTreeEntry middle = new BTreeEntry(parentEntry.getKey(), leftPage.reverseIterator().next().getRightChild(), rightPage.iterator().next().getLeftChild());
 		leftPage.insertEntry(middle);
 
-		for (int i = 0; i < n_entries; i++) {
-			if (!it.hasNext()) {
-				throw new DbException("No more entries to merge.");
-			}
+		while (it.hasNext()) {
 			BTreeEntry entry = it.next();
 			rightPage.deleteKeyAndLeftChild(entry);
 			leftPage.insertEntry(entry);

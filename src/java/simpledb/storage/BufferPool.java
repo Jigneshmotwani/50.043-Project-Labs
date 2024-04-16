@@ -11,6 +11,7 @@ import simpledb.transaction.TransactionId;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -156,24 +157,20 @@ public class BufferPool {
      */
     public void transactionComplete(TransactionId tid, boolean commit) {
         // some code goes here
-        try {
-            if (commit) {
-                this.flushPages(tid);
-            } else {
-                Iterator<PageId> iter = pages.keySet().iterator();
-                while (iter.hasNext()) {
-                    PageId pid = iter.next();
-                    Page page = pages.get(pid);
-                    if (page.isDirty() != null && page.isDirty().equals(tid)) {
-                        Page tempPage = page.getBeforeImage();
-                        pages.remove(pid);
-                        pages.put(pid, tempPage);
-                    }
+        if (this.lockManager.getPagesHeldByLock(tid) == null)
+            return;
+        Set<PageId> pageIds = this.lockManager.getPagesHeldByLock(tid);
+        if (commit) {
+            for (PageId pageId : pageIds) {
+                try {
+                    this.flushPage(pageId);
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
-
             }
-        } catch (IOException e) {
-            e.printStackTrace();
+        } else {
+            for (PageId pageId : pageIds)
+                this.discardPage(pageId);
         }
         this.lockManager.releaseAllLocks(tid);   
     }
@@ -262,6 +259,7 @@ public class BufferPool {
      */
     public synchronized void discardPage(PageId pid) {
         // some code goes here
+        if (pid == null) return;
         // remove page from buffer pool without flushing to disk
         this.pages.remove(pid);
     }
